@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <io/mmap_file.h>
+#include <graph_loader/graph.h>
 
 namespace leaderrank {
 
@@ -11,48 +12,45 @@ class LeaderRankCounter {
 public:
     LeaderRankCounter(const std::string& input_path, std::string output_path, size_t threads,
                       double eps, size_t max_iters)
-        : input_reader_(input_path),
-          output_path_(std::move(output_path)),
-          threads_(threads),
-          eps_(eps),
-          max_iters_(max_iters) {
+        : output_path_(std::move(output_path)), eps_(eps), max_iters_(max_iters) {
+        GraphLoader graph_loader;
+        graph_ = graph_loader.Load(input_path, threads);
+        threads_ = graph_.divided_edges.size();
+
+        current_step_.values = std::make_unique<MMapFile>("current_step_result.bin",
+                                                          graph_.vertex_amount * sizeof(double));
+        current_step_.values->Fill<double>(1.0);
+        current_step_.ground_value = 0;
+
+        prev_step_.values = std::make_unique<MMapFile>("prev_step_result.bin",
+                                                       graph_.vertex_amount * sizeof(double));
+        prev_step_.ground_value = 0;
     }
 
     void Run();
 
-    double GetRank(uint32_t vertex) {
-        return current_step_result_->Read<double>(vertex) +
-               current_ground_result_.load() / current_step_result_->GetSizeFor<double>();
+    double GetRank(uint32_t vertex) const {
+        return current_step_.values->Read<double>(vertex);
     }
 
-    size_t VertexCount() {
-        return current_step_result_->GetSizeFor<double>();
+    size_t VertexCount() const {
+        return graph_.vertex_amount;
     }
 
 private:
-    void Preprocess();
-
     double Step();
 
-    struct ThreadDivResult {
-        std::vector<size_t> edges_count;
-        std::vector<size_t> file_pos;
+    void Finish();
+
+    LoadedGraph graph_;
+
+    struct StepState {
+        std::unique_ptr<MMapFile> values;
+        std::atomic<double> ground_value;
     };
 
-    ThreadDivResult DivideFile();
-
-    size_t ParseByDivison(const ThreadDivResult& division);
-
-    void CountDegrees();
-
-    MMapFile input_reader_;
-    std::unique_ptr<MMapFile> old_step_result_;
-    std::unique_ptr<MMapFile> current_step_result_;
-    std::atomic<double> old_ground_result_;
-    std::atomic<double> current_ground_result_;
-
-    std::unique_ptr<MMapFile> vertex_degrees_;
-    std::vector<std::unique_ptr<MMapFile>> divided_edges_;
+    StepState current_step_;
+    StepState prev_step_;
 
     std::string output_path_;
     size_t threads_;

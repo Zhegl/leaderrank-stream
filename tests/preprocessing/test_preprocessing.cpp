@@ -1,7 +1,7 @@
 // большинство тестов писали ллм
 
+#include <graph_loader/graph.h>
 #include <io/mmap_file.h>
-#include <leaderrank/leaderrank.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-using leaderrank::LeaderRankCounter;
+using leaderrank::GraphLoader;
+using leaderrank::LoadedGraph;
 using leaderrank::MMapFile;
 
 namespace {
@@ -17,7 +18,7 @@ namespace {
 std::string WriteInputFile(const std::string& name, const std::string& body) {
     std::string path = "/tmp/leaderrank_test_" + name + ".txt";
     std::ofstream out(path, std::ios::binary);
-    out << "from, to\n" << body;
+    out << "from,to\n" << body;
     return path;
 }
 
@@ -32,25 +33,23 @@ void CleanupArtifacts(size_t threads) {
 
 }  // namespace
 
-TEST(Preprocess, SimpleGraphDegreesAreCorrect) {
+TEST(GraphLoader, SimpleGraphDegreesAreCorrect) {
     // 0 -> 1, 0 -> 2, 1 -> 2  => degree(0)=2, degree(1)=1, degree(2)=0
     auto path = WriteInputFile("simple", "0 1\n0 2\n1 2\n");
 
-    LeaderRankCounter counter(path, "/tmp/leaderrank_out_simple.csv",
-                              /*threads=*/2, /*eps=*/1e-6, /*max_iters=*/50);
-    counter.Run();
+    GraphLoader loader;
+    LoadedGraph graph = loader.Load(path, /*threads=*/2);
 
-    MMapFile degrees("vertex_degrees.bin");
-    EXPECT_EQ(degrees.GetSize(), 3 * sizeof(size_t));
-    EXPECT_EQ(degrees.Read<size_t>(0), 2u);
-    EXPECT_EQ(degrees.Read<size_t>(1), 1u);
-    EXPECT_EQ(degrees.Read<size_t>(2), 0u);
+    EXPECT_EQ(graph.vertex_amount, 3u);
+    EXPECT_EQ(graph.vertex_degrees->Read<size_t>(0), 2u);
+    EXPECT_EQ(graph.vertex_degrees->Read<size_t>(1), 1u);
+    EXPECT_EQ(graph.vertex_degrees->Read<size_t>(2), 0u);
 
     CleanupArtifacts(2);
     std::remove(path.c_str());
 }
 
-TEST(Preprocess, DegreeSumEqualsEdgeCount) {
+TEST(GraphLoader, DegreeSumEqualsEdgeCount) {
     std::string body;
     constexpr int kEdges = 500;
     for (int i = 0; i < kEdges; ++i) {
@@ -58,15 +57,12 @@ TEST(Preprocess, DegreeSumEqualsEdgeCount) {
     }
     auto path = WriteInputFile("degree_sum", body);
 
-    LeaderRankCounter counter(path, "/tmp/leaderrank_out_sum.csv",
-                              /*threads=*/4, /*eps=*/1e-6, /*max_iters=*/50);
-    counter.Run();
+    GraphLoader loader;
+    LoadedGraph graph = loader.Load(path, /*threads=*/4);
 
-    MMapFile degrees("vertex_degrees.bin");
-    size_t num_vertices = degrees.GetSize() / sizeof(size_t);
     size_t sum = 0;
-    for (size_t v = 0; v < num_vertices; ++v) {
-        sum += degrees.Read<size_t>(v);
+    for (size_t v = 0; v < graph.vertex_amount; ++v) {
+        sum += graph.vertex_degrees->Read<size_t>(v);
     }
     EXPECT_EQ(sum, static_cast<size_t>(kEdges));
 
@@ -74,7 +70,7 @@ TEST(Preprocess, DegreeSumEqualsEdgeCount) {
     std::remove(path.c_str());
 }
 
-TEST(Preprocess, ResultConsistentAcrossThreadCounts) {
+TEST(GraphLoader, ResultConsistentAcrossThreadCounts) {
     std::string body;
     constexpr int kEdges = 1000;
     for (int i = 0; i < kEdges; ++i) {
@@ -82,31 +78,21 @@ TEST(Preprocess, ResultConsistentAcrossThreadCounts) {
     }
 
     auto path1 = WriteInputFile("consistency_1", body);
-    LeaderRankCounter counter1(path1, "/tmp/leaderrank_out_c1.csv",
-                               /*threads=*/1, /*eps=*/1e-6, /*max_iters=*/50);
-    counter1.Run();
+    GraphLoader loader1;
+    LoadedGraph graph1 = loader1.Load(path1, /*threads=*/1);
     std::vector<size_t> degrees_1thread;
-    {
-        MMapFile degrees("vertex_degrees.bin");
-        size_t n = degrees.GetSize() / sizeof(size_t);
-        for (size_t v = 0; v < n; ++v) {
-            degrees_1thread.push_back(degrees.Read<size_t>(v));
-        }
+    for (size_t v = 0; v < graph1.vertex_amount; ++v) {
+        degrees_1thread.push_back(graph1.vertex_degrees->Read<size_t>(v));
     }
     CleanupArtifacts(1);
     std::remove(path1.c_str());
 
     auto path8 = WriteInputFile("consistency_8", body);
-    LeaderRankCounter counter8(path8, "/tmp/leaderrank_out_c8.csv",
-                               /*threads=*/8, /*eps=*/1e-6, /*max_iters=*/50);
-    counter8.Run();
+    GraphLoader loader8;
+    LoadedGraph graph8 = loader8.Load(path8, /*threads=*/8);
     std::vector<size_t> degrees_8threads;
-    {
-        MMapFile degrees("vertex_degrees.bin");
-        size_t n = degrees.GetSize() / sizeof(size_t);
-        for (size_t v = 0; v < n; ++v) {
-            degrees_8threads.push_back(degrees.Read<size_t>(v));
-        }
+    for (size_t v = 0; v < graph8.vertex_amount; ++v) {
+        degrees_8threads.push_back(graph8.vertex_degrees->Read<size_t>(v));
     }
     CleanupArtifacts(8);
     std::remove(path8.c_str());
@@ -115,47 +101,60 @@ TEST(Preprocess, ResultConsistentAcrossThreadCounts) {
     EXPECT_EQ(degrees_1thread, degrees_8threads);
 }
 
-TEST(Preprocess, WrongPrefixThrows) {
+TEST(GraphLoader, WrongPrefixThrows) {
     std::string path = "/tmp/leaderrank_test_bad_prefix.txt";
     std::ofstream out(path, std::ios::binary);
     out << "not the right header\n0 1\n";
     out.close();
 
-    LeaderRankCounter counter(path, "/tmp/leaderrank_out_bad.csv",
-                              /*threads=*/2, /*eps=*/1e-6, /*max_iters=*/50);
-    EXPECT_THROW(counter.Run(), std::runtime_error);
+    GraphLoader loader;
+    EXPECT_THROW(loader.Load(path, /*threads=*/2), std::runtime_error);
 
     std::remove(path.c_str());
 }
 
-TEST(Preprocess, MalformedEdgeLineThrows) {
+TEST(GraphLoader, MalformedEdgeLineThrows) {
     auto path = WriteInputFile("malformed", "0 1\n2  3\n");
 
-    LeaderRankCounter counter(path, "/tmp/leaderrank_out_malformed.csv",
-                              /*threads=*/1, /*eps=*/1e-6, /*max_iters=*/50);
-    EXPECT_THROW(counter.Run(), std::runtime_error);
+    GraphLoader loader;
+    EXPECT_THROW(loader.Load(path, /*threads=*/1), std::runtime_error);
 
     std::remove(path.c_str());
 }
 
-TEST(Preprocess, SelfLoopStillWorks) {
+TEST(GraphLoader, SelfLoopStillWorks) {
     auto path = WriteInputFile("self_loop", "0 0\n");
 
-    LeaderRankCounter counter(path, "/tmp/leaderrank_out_loop.csv",
-                              /*threads=*/1, /*eps=*/1e-6, /*max_iters=*/50);
-    counter.Run();
+    GraphLoader loader;
+    LoadedGraph graph = loader.Load(path, /*threads=*/1);
 
-    MMapFile degrees("vertex_degrees.bin");
-    EXPECT_EQ(degrees.GetSize(), 1 * sizeof(size_t));
-    EXPECT_EQ(degrees.Read<size_t>(0), 1u);
+    EXPECT_EQ(graph.vertex_amount, 1u);
+    EXPECT_EQ(graph.vertex_degrees->Read<size_t>(0), 1u);
 
     CleanupArtifacts(1);
     std::remove(path.c_str());
 }
 
+/*
+TEST(GraphLoader, TrailingBlankLineIsIgnored) {
+    auto path = WriteInputFile("trailing_newline", "0 1\n1 2\n2 0\n\n");
+
+    GraphLoader loader;
+    LoadedGraph graph = loader.Load(path, 2);
+
+    EXPECT_EQ(graph.vertex_amount, 3u);
+    size_t sum = 0;
+    for (size_t v = 0; v < graph.vertex_amount; ++v) {
+        sum += graph.vertex_degrees->Read<size_t>(v);
+    }
+    EXPECT_EQ(sum, 3u);
+
+    CleanupArtifacts(2);
+    std::remove(path.c_str());
+}
+*/
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
-    int result = RUN_ALL_TESTS();
-    return result;
+    return RUN_ALL_TESTS();
 }

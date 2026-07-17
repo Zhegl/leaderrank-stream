@@ -17,7 +17,7 @@ namespace {
 std::string WriteInputFile(const std::string& name, const std::string& body) {
     std::string path = "/tmp/leaderrank_test_" + name + ".txt";
     std::ofstream out(path, std::ios::binary);
-    out << "from, to\n" << body;
+    out << "from,to\n" << body;
     return path;
 }
 

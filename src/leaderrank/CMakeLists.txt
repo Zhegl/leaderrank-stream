@@ -11,4 +11,5 @@ target_include_directories(leaderrank_lib
 target_link_libraries(leaderrank_lib
     PUBLIC
         mmap_file_lib
+        graph_lib
 )

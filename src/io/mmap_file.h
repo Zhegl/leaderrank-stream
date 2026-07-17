@@ -20,35 +20,35 @@ public:
 
     ~MMapFile();
 
-    size_t GetSize() {
+    size_t GetSize() const {
         return size_;
     }
 
     template <typename T>
-    size_t GetSizeFor() {
+    size_t GetSizeFor() const {
         return GetSize() / sizeof(T);
     }
 
     template <typename T>
-    T Read(size_t index) {
+    T Read(size_t index) const {
         T result;
         std::memcpy(&result, base_ + index * sizeof(T), sizeof(T));
         return result;
     }
 
     template <typename T>
-    void Write(size_t index, const T& value) {
+    void Write(size_t index, const T& value) const {
         std::memcpy(base_ + index * sizeof(T), &value, sizeof(T));
     }
 
     template <typename T>
-    void Add(size_t index, T delta) {
+    void Add(size_t index, T delta) const {
         std::atomic_ref<T> slot(*reinterpret_cast<T*>(base_ + index * sizeof(T)));
         slot.fetch_add(delta);
     }
 
     template <typename T>
-    void Fill(const T& value, size_t threads = 1) {
+    void Fill(const T& value, size_t threads = 1) const {
         size_t count = GetSizeFor<T>();
         if (threads <= 1) {
             for (size_t i = 0; i < count; ++i) {
