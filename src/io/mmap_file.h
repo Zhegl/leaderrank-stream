@@ -16,7 +16,7 @@ class MMapFile {
 public:
     MMapFile(const std::string& path);  // Read only
 
-    MMapFile(const std::string& path, size_t size);  // Create with size
+    MMapFile(const std::string& path, size_t size);  // Создаем на запись
 
     ~MMapFile();
 
@@ -25,29 +25,34 @@ public:
     }
 
     template <typename T>
-    T Read(size_t pos) {
+    size_t GetSizeFor() {
+        return GetSize() / sizeof(T);
+    }
+
+    template <typename T>
+    T Read(size_t index) {
         T result;
-        memcpy(&result, base_ + pos, sizeof(T));
+        std::memcpy(&result, base_ + index * sizeof(T), sizeof(T));
         return result;
     }
 
     template <typename T>
-    void Write(size_t pos, const T& value) {
-        std::memcpy(base_ + pos, &value, sizeof(T));
+    void Write(size_t index, const T& value) {
+        std::memcpy(base_ + index * sizeof(T), &value, sizeof(T));
     }
 
     template <typename T>
-    void Add(size_t pos, T delta) {
-        std::atomic_ref<T> slot(*reinterpret_cast<T*>(base_ + pos));
+    void Add(size_t index, T delta) {
+        std::atomic_ref<T> slot(*reinterpret_cast<T*>(base_ + index * sizeof(T)));
         slot.fetch_add(delta);
     }
 
     template <typename T>
     void Fill(const T& value, size_t threads = 1) {
-        size_t count = size_ / sizeof(T);
+        size_t count = GetSizeFor<T>();
         if (threads <= 1) {
             for (size_t i = 0; i < count; ++i) {
-                Write(i * sizeof(T), value);
+                Write(i, value);
             }
             return;
         }
@@ -56,7 +61,7 @@ public:
             size_t start = t * count / threads;
             size_t finish = (t + 1) * count / threads;
             for (size_t i = start; i < finish; ++i) {
-                Write(i * sizeof(T), value);
+                Write(i, value);
             }
         });
     }

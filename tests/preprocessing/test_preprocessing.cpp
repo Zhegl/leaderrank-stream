@@ -42,9 +42,9 @@ TEST(Preprocess, SimpleGraphDegreesAreCorrect) {
 
     MMapFile degrees("vertex_degrees.bin");
     EXPECT_EQ(degrees.GetSize(), 3 * sizeof(size_t));
-    EXPECT_EQ(degrees.Read<size_t>(0 * sizeof(size_t)), 2u);
-    EXPECT_EQ(degrees.Read<size_t>(1 * sizeof(size_t)), 1u);
-    EXPECT_EQ(degrees.Read<size_t>(2 * sizeof(size_t)), 0u);
+    EXPECT_EQ(degrees.Read<size_t>(0), 2u);
+    EXPECT_EQ(degrees.Read<size_t>(1), 1u);
+    EXPECT_EQ(degrees.Read<size_t>(2), 0u);
 
     CleanupArtifacts(2);
     std::remove(path.c_str());
@@ -66,7 +66,7 @@ TEST(Preprocess, DegreeSumEqualsEdgeCount) {
     size_t num_vertices = degrees.GetSize() / sizeof(size_t);
     size_t sum = 0;
     for (size_t v = 0; v < num_vertices; ++v) {
-        sum += degrees.Read<size_t>(v * sizeof(size_t));
+        sum += degrees.Read<size_t>(v);
     }
     EXPECT_EQ(sum, static_cast<size_t>(kEdges));
 
@@ -90,7 +90,7 @@ TEST(Preprocess, ResultConsistentAcrossThreadCounts) {
         MMapFile degrees("vertex_degrees.bin");
         size_t n = degrees.GetSize() / sizeof(size_t);
         for (size_t v = 0; v < n; ++v) {
-            degrees_1thread.push_back(degrees.Read<size_t>(v * sizeof(size_t)));
+            degrees_1thread.push_back(degrees.Read<size_t>(v));
         }
     }
     CleanupArtifacts(1);
@@ -105,7 +105,7 @@ TEST(Preprocess, ResultConsistentAcrossThreadCounts) {
         MMapFile degrees("vertex_degrees.bin");
         size_t n = degrees.GetSize() / sizeof(size_t);
         for (size_t v = 0; v < n; ++v) {
-            degrees_8threads.push_back(degrees.Read<size_t>(v * sizeof(size_t)));
+            degrees_8threads.push_back(degrees.Read<size_t>(v));
         }
     }
     CleanupArtifacts(8);
@@ -152,6 +152,7 @@ TEST(Preprocess, SelfLoopStillWorks) {
     CleanupArtifacts(1);
     std::remove(path.c_str());
 }
+
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

@@ -20,6 +20,15 @@ public:
 
     void Run();
 
+    double GetRank(uint32_t vertex) {
+        return current_step_result_->Read<double>(vertex) +
+               current_ground_result_.load() / current_step_result_->GetSizeFor<double>();
+    }
+
+    size_t VertexCount() {
+        return current_step_result_->GetSizeFor<double>();
+    }
+
 private:
     void Preprocess();
 
@@ -39,10 +48,11 @@ private:
     MMapFile input_reader_;
     std::unique_ptr<MMapFile> old_step_result_;
     std::unique_ptr<MMapFile> current_step_result_;
+    std::atomic<double> old_ground_result_;
+    std::atomic<double> current_ground_result_;
+
     std::unique_ptr<MMapFile> vertex_degrees_;
-    std::vector<std::unique_ptr<MMapFile>>
-        divided_edges_;  // тут не будет фолс шеринга т.к. записываем один раз за тред при
-                         // процессинге, дальше RO
+    std::vector<std::unique_ptr<MMapFile>> divided_edges_;
 
     std::string output_path_;
     size_t threads_;

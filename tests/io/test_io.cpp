@@ -11,8 +11,6 @@ using leaderrank::MMapFile;
 
 namespace {
 
-// Уникальное имя файла на тест, чтобы тесты не топтали друг друга при
-// параллельном запуске (ctest -j).
 std::string TmpPath(const std::string& name) {
     return "/tmp/mmap_file_test_" + name + ".bin";
 }
@@ -24,17 +22,17 @@ TEST(MMapFile, WriteThenReadRoundtrip) {
     {
         MMapFile f(path, sizeof(uint32_t) * 4);
         f.Write<uint32_t>(0, 111);
-        f.Write<uint32_t>(4, 222);
-        f.Write<uint32_t>(8, 333);
-        f.Write<uint32_t>(12, 444);
+        f.Write<uint32_t>(1, 222);
+        f.Write<uint32_t>(2, 333);
+        f.Write<uint32_t>(3, 444);
     }  // деструктор закрывает mmap, дальше читаем как будто с чистого листа
 
     MMapFile f(path);
     EXPECT_EQ(f.GetSize(), sizeof(uint32_t) * 4);
     EXPECT_EQ(f.Read<uint32_t>(0), 111u);
-    EXPECT_EQ(f.Read<uint32_t>(4), 222u);
-    EXPECT_EQ(f.Read<uint32_t>(8), 333u);
-    EXPECT_EQ(f.Read<uint32_t>(12), 444u);
+    EXPECT_EQ(f.Read<uint32_t>(1), 222u);
+    EXPECT_EQ(f.Read<uint32_t>(2), 333u);
+    EXPECT_EQ(f.Read<uint32_t>(3), 444u);
 
     std::remove(path.c_str());
 }
@@ -43,7 +41,7 @@ TEST(MMapFile, ZeroInitializedOnCreate) {
     auto path = TmpPath("zero_init");
     MMapFile f(path, sizeof(float) * 10);
     for (size_t i = 0; i < 10; ++i) {
-        EXPECT_FLOAT_EQ(f.Read<float>(i * sizeof(float)), 0.0f);
+        EXPECT_FLOAT_EQ(f.Read<float>(i), 0.0f);
     }
     std::remove(path.c_str());
 }
@@ -52,7 +50,7 @@ TEST(MMapFile, OpenNonexistentFileThrows) {
     EXPECT_THROW(MMapFile("/tmp/definitely_does_not_exist_leaderrank.bin"), std::runtime_error);
 }
 
-TEST(MMapFile, ConcurrentAddIsRace_Free) {
+TEST(MMapFile, ConcurrentAddIsRaceFree) {
     auto path = TmpPath("concurrent_add");
     MMapFile f(path, sizeof(float));
 
@@ -104,7 +102,7 @@ TEST(MMapFile, ConcurrentAddIntegral) {
 }
 
 TEST(MMapFile, MultipleFieldsIndependentUnderConcurrency) {
-    // Проверяем, что запись в разные offset'ы не мешает друг другу
+    // Проверяем, что запись в разные индексы не мешает друг другу
     // (это ровно паттерн x_new[j] += ... для разных j одновременно).
     auto path = TmpPath("independent_slots");
     constexpr size_t kSlots = 16;
@@ -114,7 +112,7 @@ TEST(MMapFile, MultipleFieldsIndependentUnderConcurrency) {
     for (size_t slot = 0; slot < kSlots; ++slot) {
         threads.emplace_back([&f, slot] {
             for (int i = 0; i < 1000; ++i) {
-                f.Add<float>(slot * sizeof(float), 1.0f);
+                f.Add<float>(slot, 1.0f);
             }
         });
     }
@@ -123,7 +121,7 @@ TEST(MMapFile, MultipleFieldsIndependentUnderConcurrency) {
     }
 
     for (size_t slot = 0; slot < kSlots; ++slot) {
-        EXPECT_FLOAT_EQ(f.Read<float>(slot * sizeof(float)), 1000.0f);
+        EXPECT_FLOAT_EQ(f.Read<float>(slot), 1000.0f);
     }
 
     std::remove(path.c_str());
