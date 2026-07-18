@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <thread>
 #include <vector>
+#include <mutex>
+#include <exception>
 
 namespace leaderrank {
 

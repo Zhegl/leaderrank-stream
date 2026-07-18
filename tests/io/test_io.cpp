@@ -20,7 +20,7 @@ std::string TmpPath(const std::string& name) {
 TEST(MMapFile, WriteThenReadRoundtrip) {
     auto path = TmpPath("roundtrip");
     {
-        MMapFile f(path, sizeof(uint32_t) * 4);
+        MMapFile f(path, sizeof(uint32_t) * 4, false);
         f.Write<uint32_t>(0, 111);
         f.Write<uint32_t>(1, 222);
         f.Write<uint32_t>(2, 333);

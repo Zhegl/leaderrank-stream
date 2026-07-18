@@ -8,7 +8,6 @@
 #include <cstddef>
 #include <cstring>
 #include <utils/parallel.h>
-#include <stdexcept>
 
 namespace leaderrank {
 
@@ -16,7 +15,7 @@ class MMapFile {
 public:
     MMapFile(const std::string& path);  // Read only
 
-    MMapFile(const std::string& path, size_t size);  // Создаем на запись
+    MMapFile(const std::string& path, size_t size, bool temporary = true);  // Создаем на запись
 
     ~MMapFile();
 
@@ -67,9 +66,11 @@ public:
     }
 
 private:
-    char* base_;
-    size_t size_;
-    int fd_;
+    char* base_ = nullptr;
+    size_t size_ = 0;
+    int fd_ = -1;
+    bool temporary_{false};
+    std::string path_;
 };
 
 }  // namespace leaderrank

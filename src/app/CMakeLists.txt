@@ -5,6 +5,5 @@ target_link_libraries(app
         mmap_file_lib
         leaderrank_lib
         gtest
-        glog::glog
 )
 

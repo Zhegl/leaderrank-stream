@@ -6,6 +6,5 @@ target_link_libraries(test_preprocessing
         mmap_file_lib
         leaderrank_lib
         gtest
-        glog::glog
 )
 
